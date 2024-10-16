@@ -1,0 +1,108 @@
+model:
+  _target_: tnp.models.alnp.ALNP
+  encoder: ${alnp_encoder}
+  decoder: ${tnp_decoder}
+  likelihood: ${likelihood}
+
+alnp_encoder:
+  _target_: tnp.models.alnp.ALNPEncoder
+  tnp_encoder: ${anp_encoder}
+  latent_transformer_encoder: ${latent_transformer_encoder}
+  latent_xy_encoder: ${latent_xy_encoder}
+
+anp_encoder:
+  _target_: tnp.models.anp.ANPEncoder
+  transformer_encoder: ${transformer_encoder}
+  mha_layer: ${mha_layer}
+  xy_encoder: ${xy_encoder}
+
+transformer_encoder:
+  _target_: tnp.networks.transformer.TransformerEncoder
+  mhsa_layer: ${mhsa_layer}
+  num_layers: ${params.num_layers}
+
+mhsa_layer:
+  _target_: tnp.networks.attention_layers.MultiHeadSelfAttentionLayer
+  embed_dim: ${params.embed_dim}
+  num_heads: ${params.num_heads}
+  head_dim: ${params.head_dim}
+  feedforward_dim: ${params.embed_dim}
+  norm_first: ${params.norm_first}
+
+mha_layer:
+  _target_: tnp.networks.attention_layers.MultiHeadAttentionLayer
+  qk_dim: ${params.dim_x}
+  v_dim: ${params.embed_dim}
+  num_heads: ${params.num_heads}
+  head_dim: ${params.head_dim}
+  feedforward_dim: ${params.embed_dim}
+  norm_first: ${params.norm_first}
+
+xy_encoder:
+  _target_: tnp.networks.mlp.MLP
+  in_dim: ${eval:'${params.dim_y} + ${params.dim_x}'}
+  out_dim: ${params.embed_dim}
+  num_layers: 2
+  width: ${params.embed_dim}
+
+latent_transformer_encoder:
+  _target_: tnp.networks.transformer.TransformerEncoder
+  mhsa_layer: ${latent_mhsa_layer}
+  num_layers: ${params.num_layers}
+
+latent_mhsa_layer:
+  _target_: tnp.networks.attention_layers.MultiHeadSelfAttentionLayer
+  embed_dim: ${params.latent_embed_dim}
+  num_heads: ${params.num_heads}
+  head_dim: ${params.head_dim}
+  feedforward_dim: ${params.latent_embed_dim}
+  norm_first: ${params.norm_first}
+
+latent_xy_encoder:
+  _target_: tnp.networks.mlp.MLP
+  in_dim: ${eval:'${params.dim_y} + ${params.dim_x}'}
+  out_dim: ${params.latent_embed_dim}
+  num_layers: 2
+  width: ${params.latent_embed_dim}
+
+tnp_decoder:
+  _target_: tnp.models.tnp.TNPDecoder
+  z_decoder: ${z_decoder}
+
+z_decoder:
+  _target_: tnp.networks.mlp.MLP
+  in_dim: ${eval:'${params.embed_dim} + ${params.latent_embed_dim} // 2'}
+  out_dim: ${eval:'2 * ${params.dim_y}'}
+  num_layers: 2
+  width: ${params.embed_dim}
+
+likelihood:
+  _target_: tnp.likelihoods.gaussian.HeteroscedasticNormalLikelihood
+
+optimiser:
+  _target_: torch.optim.AdamW
+  _partial_: True
+  lr: 5.0e-4
+
+params:
+  epochs: 500
+  embed_dim: 128
+  latent_embed_dim: ${params.embed_dim}
+  num_heads: 8
+  head_dim: 16
+  norm_first: True
+  num_layers: 5
+
+misc:
+  name: ALNP-L${params.num_layers}-H${params.num_heads}-D${params.embed_dim}
+  resume_from_checkpoint: null
+  gradient_clip_val: 0.5
+  plot_interval: 1
+  loss_fn:
+    _target_: tnp.utils.np_functions.np_loss_fn
+    _partial_: True
+    num_samples: 32
+  pred_fn:
+    _target_: tnp.utils.np_functions.np_pred_fn
+    _partial_: True
+    num_samples: 32
