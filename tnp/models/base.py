@@ -4,6 +4,8 @@ import torch
 from check_shapes import check_shapes
 from torch import nn
 
+from ..likelihoods.base import UniformMixtureLikelihood
+
 
 class BaseNeuralProcess(nn.Module, ABC):
     """Represents a neural process base class"""
@@ -29,7 +31,11 @@ class ConditionalNeuralProcess(BaseNeuralProcess):
         return self.likelihood(self.decoder(self.encoder(xc, yc, xt), xt))
 
 
-class NeuralProcess(BaseNeuralProcess):
+class LatentNeuralProcess(BaseNeuralProcess):
+    def __init__(self, encoder: nn.Module, decoder: nn.Module, likelihood: nn.Module):
+        likelihood = UniformMixtureLikelihood(likelihood)
+        super().__init__(encoder, decoder, likelihood)
+
     @check_shapes("xc: [m, nc, dx]", "yc: [m, nc, dy]", "xt: [m, nt, dx]")
     def forward(
         self, xc: torch.Tensor, yc: torch.Tensor, xt: torch.Tensor, num_samples: int = 1

@@ -13,7 +13,7 @@ class ANPEncoder(nn.Module):
         self,
         transformer_encoder: TransformerEncoder,
         mha_layer: MultiHeadAttentionLayer,
-        xy_encoder: TransformerEncoder,
+        xy_encoder: nn.Module,
         x_encoder: nn.Module = nn.Identity(),
         y_encoder: nn.Module = nn.Identity(),
     ):
