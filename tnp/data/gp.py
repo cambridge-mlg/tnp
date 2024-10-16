@@ -1,11 +1,12 @@
 import random
 from abc import ABC
-from typing import Dict, Iterable, Optional, Tuple, Type, Union
+from typing import Dict, Iterable, Optional, Tuple, Union
 
 import einops
 import gpytorch
 import torch
 
+from ..networks.gp import RandomHyperparameterKernel
 from .base import GroundTruthPredictor
 from .synthetic import SyntheticGeneratorUniformInput
 
@@ -86,16 +87,17 @@ class GPGroundTruthPredictor(GroundTruthPredictor):
             gp_model.likelihood.eval()
             with torch.no_grad():
 
-                dist_ = gp_model(xt_)
-                mean_ = dist_.mean
-                std_ = dist_.stddev + self.likelihood.noise**0.5
-                diag_dist_ = torch.distributions.Normal(mean_, std_)
+                dist = gp_model(xt_)
+                pred_dist = gp_model.likelihood.marginal(dist)
                 if yt is not None:
-                    gt_loglik_ = diag_dist_.log_prob(yt[i, ..., 0])
-                    gt_loglik_list.append(gt_loglik_)
+                    gt_loglik = pred_dist.to_data_independent_dist().log_prob(
+                        yt[i, ..., 0]
+                    )
+                    # gt_joint_loglik = pred_dist.log_prob(yt[i, ..., 0])
+                    gt_loglik_list.append(gt_loglik)
 
-                mean_list.append(mean_)
-                std_list.append(std_)
+                mean_list.append(pred_dist.mean)
+                std_list.append(pred_dist.stddev)
 
         mean = torch.stack(mean_list, dim=0)
         std = torch.stack(std_list, dim=0)
@@ -149,11 +151,9 @@ class GPGenerator(ABC):
         self,
         *,
         kernel: Union[
-            Type[gpytorch.kernels.Kernel],
-            Tuple[Type[gpytorch.kernels.Kernel], ...],
+            RandomHyperparameterKernel,
+            Tuple[RandomHyperparameterKernel, ...],
         ],
-        min_log10_lengthscale: float,
-        max_log10_lengthscale: float,
         noise_std: float,
         ard_num_dims: Optional[int] = None,
         **kwargs,
@@ -164,42 +164,17 @@ class GPGenerator(ABC):
         if isinstance(self.kernel, Iterable):
             self.kernel = tuple(self.kernel)
 
-        self.min_log10_lengthscale = torch.as_tensor(
-            min_log10_lengthscale, dtype=torch.float
-        )
-        self.max_log10_lengthscale = torch.as_tensor(
-            max_log10_lengthscale, dtype=torch.float
-        )
         self.noise_std = noise_std
         self.ard_num_dims = ard_num_dims
 
     def set_up_gp(self) -> GPGroundTruthPredictor:
-        # Sample lengthscale.
-        if self.ard_num_dims is None:
-            log10_lengthscale = (
-                torch.rand(())
-                * (self.max_log10_lengthscale - self.min_log10_lengthscale)
-                + self.min_log10_lengthscale
-            )
-        else:
-            log10_lengthscale = (
-                torch.randn(self.ard_num_dims)
-                * (self.max_log10_lengthscale - self.min_log10_lengthscale)
-                + self.min_log10_lengthscale
-            )
-
-        lengthscale = 10.0**log10_lengthscale
-
         if isinstance(self.kernel, tuple):
             kernel = random.choice(self.kernel)
         else:
             kernel = self.kernel
 
         kernel = kernel()
-        if hasattr(kernel, "base_kernel"):
-            kernel.base_kernel.lengthscale = lengthscale
-        else:
-            kernel.lengthscale = lengthscale
+        kernel.sample_hyperparameters()
 
         likelihood = gpytorch.likelihoods.GaussianLikelihood()
         likelihood.noise = self.noise_std**2.0
