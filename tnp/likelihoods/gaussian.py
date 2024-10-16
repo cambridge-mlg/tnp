@@ -34,7 +34,7 @@ class HeteroscedasticNormalLikelihood(Likelihood):
     def forward(self, x: torch.Tensor) -> td.Normal:
         assert x.shape[-1] % 2 == 0
 
-        loc, log_var = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2 :]
+        loc, log_var = torch.chunk(x, 2, dim=-1)
         scale = (
             nn.functional.softplus(log_var) ** 0.5  # pylint: disable=not-callable
             + self.min_noise

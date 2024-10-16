@@ -31,6 +31,6 @@ class UniformMixtureLikelihood(Likelihood):
         comp_dists = td.Independent(dists, 2)
 
         # Uniform mixture of distributions.
-        mix_dists = td.Categorical(torch.ones(x.shape[:-2]))
+        mix_dists = td.Categorical(torch.ones(x.shape[:-2]).to(x))
 
         return td.MixtureSameFamily(mix_dists, comp_dists)
